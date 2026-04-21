@@ -275,6 +275,17 @@
       color: var(--warning);
     }
 
+    .provider-line {
+      margin: 0 0 12px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      line-height: 1.4;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
     .checked-email {
       margin: 0 0 28px;
       color: var(--text-secondary);
@@ -376,6 +387,144 @@
       text-transform: uppercase;
     }
 
+    .notes-panel {
+      margin-top: 18px;
+    }
+
+    .note-textarea {
+      width: 100%;
+      min-height: 96px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      outline: 0;
+      padding: 14px;
+      background: var(--card);
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .note-textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .note-textarea::placeholder {
+      color: #4d4d4d;
+    }
+
+    .note-button {
+      margin-top: 12px;
+    }
+
+    .history-section {
+      margin-top: 48px;
+      padding-top: 26px;
+      border-top: 1px solid var(--border);
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 10px;
+    }
+
+    .history-title {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .history-clear {
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .history-clear:hover,
+    .history-clear:focus-visible {
+      color: var(--text-primary);
+      outline: 0;
+    }
+
+    .history-list {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .history-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      width: 100%;
+      min-height: 54px;
+      gap: 8px 14px;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-primary);
+      padding: 12px 0;
+      text-align: left;
+    }
+
+    .history-row:hover,
+    .history-row:focus-visible {
+      color: var(--text-primary);
+      outline: 0;
+    }
+
+    .history-email {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .history-status {
+      justify-self: end;
+      border: 1px solid currentColor;
+      padding: 4px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      line-height: 1.2;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .history-provider {
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      line-height: 1.4;
+      text-transform: uppercase;
+    }
+
+    .history-date {
+      grid-column: 1 / -1;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .history-empty {
+      padding: 16px 0;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
     @media (max-width: 600px) {
       .login-screen {
         padding: 18px;
@@ -408,6 +557,20 @@
 
       .status-badge {
         font-size: 19px;
+      }
+
+      .history-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .history-row {
+        grid-template-columns: 1fr;
+      }
+
+      .history-status {
+        justify-self: start;
       }
     }
   </style>
@@ -445,6 +608,14 @@
       </form>
 
       <div class="result-area" id="resultArea"></div>
+
+      <section class="history-section" aria-labelledby="historyTitle">
+        <div class="history-header">
+          <h2 class="history-title" id="historyTitle">RECENT CHECKS</h2>
+          <button class="history-clear" id="clearHistory" type="button">CLEAR HISTORY</button>
+        </div>
+        <ul class="history-list" id="historyList"></ul>
+      </section>
     </main>
   </div>
 
@@ -457,6 +628,7 @@
     const USE_FALLBACK = true;
 
     const SESSION_KEY = 'verifexAuthenticated';
+    const HISTORY_KEY = 'verifex_history';
     const loginScreen = document.getElementById('loginScreen');
     const loginForm = document.getElementById('loginForm');
     const loginError = document.getElementById('loginError');
@@ -466,6 +638,8 @@
     const verifyButton = document.getElementById('verifyButton');
     const emailInput = document.getElementById('emailInput');
     const resultArea = document.getElementById('resultArea');
+    const historyList = document.getElementById('historyList');
+    const clearHistory = document.getElementById('clearHistory');
     let loaderTween = null;
 
     function revealApp(animated) {
@@ -570,6 +744,111 @@
       return 'status-warning';
     }
 
+    function normalizeResult(data) {
+      const details = data.details || {};
+      return {
+        email: data.email || emailInput.value.trim(),
+        status: data.status || 'Unable to Confirm',
+        details: {
+          formatValid: Boolean(details.formatValid),
+          mxFound: Boolean(details.mxFound),
+          mxHost: details.mxHost || null,
+          smtpCode: details.smtpCode === undefined ? null : details.smtpCode,
+          smtpMessage: details.smtpMessage || null,
+          provider: details.provider || 'None'
+        }
+      };
+    }
+
+    function noteKey(email) {
+      return `verifex_note_${email}`;
+    }
+
+    function getSavedNote(email) {
+      try {
+        return localStorage.getItem(noteKey(email)) || '';
+      } catch (_error) {
+        return '';
+      }
+    }
+
+    function getHistory() {
+      try {
+        const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+        return Array.isArray(history) ? history : [];
+      } catch (_error) {
+        return [];
+      }
+    }
+
+    function saveHistoryEntry(data) {
+      const resultData = normalizeResult(data);
+      if (!resultData.email) {
+        return;
+      }
+
+      const entry = {
+        email: resultData.email,
+        status: resultData.status,
+        provider: resultData.details.provider,
+        date: new Date().toISOString(),
+        mxHost: resultData.details.mxHost
+      };
+
+      try {
+        const history = [entry, ...getHistory()].slice(0, 30);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      } catch (_error) {
+      }
+    }
+
+    function formatHistoryDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return '';
+      }
+
+      return new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      }).format(date);
+    }
+
+    function renderHistory() {
+      const entries = getHistory().slice(0, 10);
+      clearHistory.style.display = entries.length ? 'inline-block' : 'none';
+
+      if (!entries.length) {
+        historyList.innerHTML = '<li class="history-empty">No recent checks.</li>';
+        return;
+      }
+
+      historyList.innerHTML = entries.map((entry) => `
+        <li>
+          <button class="history-row" type="button" data-email="${escapeHtml(entry.email || '')}">
+            <span class="history-email">${escapeHtml(entry.email || '')}</span>
+            <span class="history-status ${statusClass(entry.status || '')}">${escapeHtml(entry.status || '')}</span>
+            <span class="history-provider">${escapeHtml(entry.provider || 'None')}</span>
+            <span class="history-date">${escapeHtml(formatHistoryDate(entry.date))}</span>
+          </button>
+        </li>
+      `).join('');
+
+      historyList.querySelectorAll('.history-row').forEach((row) => {
+        row.addEventListener('click', () => {
+          emailInput.value = row.dataset.email || '';
+          const note = document.getElementById('contactNote');
+          if (note) {
+            note.value = getSavedNote(emailInput.value);
+          }
+          emailInput.focus();
+        });
+      });
+    }
+
     function checkState(label, state) {
       const text = state === 'pass' ? 'Pass' : state === 'fail' ? 'Fail' : 'Pending';
       return `
@@ -597,26 +876,16 @@
     }
 
     function renderResult(data) {
-      const details = data.details || {};
-      const resultData = {
-        email: data.email || emailInput.value.trim(),
-        status: data.status || 'Unable to Confirm',
-        details: {
-          formatValid: Boolean(details.formatValid),
-          mxFound: Boolean(details.mxFound),
-          mxHost: details.mxHost || null,
-          smtpCode: Number.isInteger(details.smtpCode) ? details.smtpCode : null,
-          smtpMessage: details.smtpMessage || null
-        }
-      };
-
+      const resultData = normalizeResult(data);
       const mxRowState = !resultData.details.formatValid ? 'pending' : resultData.details.mxFound ? 'pass' : 'fail';
       const smtpMessage = resultData.details.smtpMessage || 'No SMTP response captured.';
-      const smtpCode = resultData.details.smtpCode ? `Code ${resultData.details.smtpCode}\n` : '';
+      const smtpCode = resultData.details.smtpCode !== null ? `Code ${resultData.details.smtpCode}\n` : '';
+      const savedNote = getSavedNote(resultData.email);
 
       resultArea.innerHTML = `
         <article class="result-card">
           <div class="status-badge ${statusClass(resultData.status)}">${escapeHtml(resultData.status)}</div>
+          <p class="provider-line">Verified by ${escapeHtml(resultData.details.provider.toUpperCase())}</p>
           <p class="checked-email">${escapeHtml(resultData.email)}</p>
           <ul class="check-list">
             ${checkState('Format Check', resultData.details.formatValid ? 'pass' : 'fail')}
@@ -625,6 +894,10 @@
           </ul>
           <pre class="smtp-block">${escapeHtml(smtpCode + smtpMessage)}</pre>
         </article>
+        <div class="notes-panel">
+          <textarea class="note-textarea" id="contactNote" placeholder="Add a note about this contact...">${escapeHtml(savedNote)}</textarea>
+          <button class="button note-button" id="saveNote" type="button">SAVE NOTE</button>
+        </div>
         <button class="check-another" id="checkAnother" type="button">CHECK ANOTHER</button>
       `;
 
@@ -636,6 +909,14 @@
         opacity: 1,
         y: 0,
         ease: 'power3.out'
+      });
+
+      document.getElementById('saveNote').addEventListener('click', () => {
+        const note = document.getElementById('contactNote').value;
+        try {
+          localStorage.setItem(noteKey(resultData.email), note);
+        } catch (_error) {
+        }
       });
 
       document.getElementById('checkAnother').addEventListener('click', () => {
@@ -664,6 +945,14 @@
       window.location.reload();
     });
 
+    clearHistory.addEventListener('click', () => {
+      try {
+        localStorage.removeItem(HISTORY_KEY);
+      } catch (_error) {
+      }
+      renderHistory();
+    });
+
     verifyForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       const email = emailInput.value.trim();
@@ -685,6 +974,8 @@
         });
         const data = await response.json();
         renderResult(data);
+        saveHistoryEntry(data);
+        renderHistory();
       } catch (error) {
         renderResult({
           email,
@@ -694,7 +985,8 @@
             mxFound: false,
             mxHost: null,
             smtpCode: null,
-            smtpMessage: `Request failed: ${error.message}`
+            smtpMessage: `Request failed: ${error.message}`,
+            provider: 'None'
           }
         });
       } finally {
@@ -705,6 +997,8 @@
     if (sessionStorage.getItem(SESSION_KEY) === 'true') {
       revealApp(false);
     }
+
+    renderHistory();
   </script>
 </body>
 </html>

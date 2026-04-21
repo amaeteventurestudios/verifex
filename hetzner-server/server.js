@@ -1,11 +1,19 @@
 const dns = require('dns').promises;
 const http = require('http');
-const net = require('net');
 const express = require('express');
+const fetch = require('node-fetch');
 
 const PORT = 3001;
 const FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const SMTP_TIMEOUT_MS = 10000;
+
+// Primary verifier: Verifalia
+// TODO: move to environment variables
+const VERIFALIA_SID = '77140bea-25e9-47af-b57c-ba140bf4d47c';
+const VERIFALIA_PASSWORD = 'pbH7Y4KTC3sRtNq'; // user must fill this in
+const VERIFALIA_QUALITY = 'High';
+
+// Fallback verifier: ZeroBounce
+const ZEROBOUNCE_API_KEY = '51342ada52b74019aeab6088be3c4a73';
 
 const app = express();
 
@@ -17,8 +25,9 @@ function result(email, status, details) {
       formatValid: Boolean(details.formatValid),
       mxFound: Boolean(details.mxFound),
       mxHost: details.mxHost || null,
-      smtpCode: Number.isInteger(details.smtpCode) ? details.smtpCode : null,
+      smtpCode: details.smtpCode === undefined ? null : details.smtpCode,
       smtpMessage: details.smtpMessage || null,
+      provider: details.provider || 'None',
     },
   };
 }
@@ -34,177 +43,81 @@ function sendJson(res, statusCode, payload) {
   res.status(statusCode).type('application/json; charset=utf-8').send(payload);
 }
 
-function isCompleteSmtpResponse(raw) {
-  const lines = raw.split(/\r?\n/).filter(Boolean);
-  return lines.some((line) => /^\d{3}\s/.test(line));
-}
-
-function parseSmtpCode(raw) {
-  const lines = raw.split(/\r?\n/).filter(Boolean).reverse();
-  const line = lines.find((entry) => /^\d{3}[\s-]/.test(entry));
-  return line ? Number.parseInt(line.slice(0, 3), 10) : null;
-}
-
-function mapSmtpStatus(code) {
-  if (code === 250) {
-    return 'Valid';
-  }
-
-  if ([550, 551, 553].includes(code)) {
-    return 'Invalid Mailbox';
-  }
-
-  if ([421, 450, 451, 452].includes(code)) {
-    return 'Unable to Confirm (Try Again)';
-  }
-
-  return 'Unable to Confirm';
-}
-
-function smtpProbe(mxHost, email) {
-  return new Promise((resolve) => {
-    const socket = net.createConnection({ host: mxHost, port: 25 });
-    let buffer = '';
-    let settled = false;
-    let waiter = null;
-
-    function finish(payload, closeMode = 'destroy') {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-
-      if (closeMode === 'end') {
-        socket.end();
-      } else {
-        socket.destroy();
-      }
-
-      resolve({
-        smtpCode: Number.isInteger(payload.smtpCode) ? payload.smtpCode : null,
-        smtpMessage: payload.smtpMessage || null,
-      });
-    }
-
-    function releaseWaiterIfReady() {
-      if (!waiter || !isCompleteSmtpResponse(buffer)) {
-        return;
-      }
-
-      const response = buffer;
-      buffer = '';
-      const resolveWaiter = waiter;
-      waiter = null;
-      resolveWaiter(response);
-    }
-
-    function waitForResponse() {
-      return new Promise((resolveWaiter) => {
-        waiter = resolveWaiter;
-        releaseWaiterIfReady();
-      });
-    }
-
-    socket.setEncoding('utf8');
-    socket.setTimeout(SMTP_TIMEOUT_MS);
-
-    socket.on('data', (chunk) => {
-      buffer += chunk;
-      releaseWaiterIfReady();
+async function verifyMailbox(email) {
+  try {
+    const auth = Buffer.from(`${VERIFALIA_SID}:${VERIFALIA_PASSWORD}`).toString('base64');
+    const response = await fetch('https://api.verifalia.com/v2.7/email-validations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        entries: [{ inputData: email }],
+        quality: VERIFALIA_QUALITY,
+      }),
     });
 
-    socket.on('timeout', () => {
-      finish({
+    const data = await response.json();
+
+    if (response.status === 403 || response.status === 429) {
+      throw new Error('Verifalia credits exhausted');
+    }
+
+    if (!response.ok) {
+      throw new Error(`Verifalia request failed with HTTP ${response.status}`);
+    }
+
+    const entry = data && data.entries && data.entries[0] ? data.entries[0] : null;
+    const classification = entry && entry.classification;
+    const rawStatus = entry && entry.status;
+    const statusMap = {
+      'Deliverable': 'Valid',
+      'Undeliverable': 'Invalid Mailbox',
+      'Risky': 'Unable to Confirm',
+      'Unknown': 'Unable to Confirm',
+    };
+
+    return {
+      status: statusMap[classification] || 'Unable to Confirm',
+      provider: 'Verifalia',
+      smtpCode: null,
+      smtpMessage: `Verifalia: ${classification || 'Unknown'} (${rawStatus || 'no detail'})`,
+    };
+  } catch (verifError) {
+    try {
+      const zbUrl = `https://api.zerobounce.net/v2/validate?api_key=${ZEROBOUNCE_API_KEY}&email=${encodeURIComponent(email)}`;
+      const zbResponse = await fetch(zbUrl);
+      const zbData = await zbResponse.json();
+      const zbStatusMap = {
+        'valid': 'Valid',
+        'invalid': 'Invalid Mailbox',
+        'catch-all': 'Unable to Confirm',
+        'unknown': 'Unable to Confirm',
+        'spamtrap': 'Invalid Mailbox',
+        'abuse': 'Invalid Mailbox',
+        'do_not_mail': 'Invalid Mailbox',
+      };
+
+      if (!zbResponse.ok) {
+        throw new Error(`ZeroBounce request failed with HTTP ${zbResponse.status}`);
+      }
+
+      return {
+        status: zbStatusMap[zbData.status] || 'Unable to Confirm',
+        provider: 'ZeroBounce',
         smtpCode: null,
-        smtpMessage: `SMTP connection timed out after ${SMTP_TIMEOUT_MS}ms`,
-      });
-    });
-
-    socket.on('error', (error) => {
-      finish({
+        smtpMessage: `ZeroBounce: ${zbData.status} (${zbData.sub_status || 'no detail'})`,
+      };
+    } catch (zbError) {
+      return {
+        status: 'Unable to Confirm',
+        provider: 'None',
         smtpCode: null,
-        smtpMessage: `SMTP connection failed: ${error.code || error.message}`,
-      });
-    });
-
-    socket.on('close', () => {
-      if (!settled) {
-        finish({
-          smtpCode: null,
-          smtpMessage: 'SMTP connection closed before verification completed',
-        });
-      }
-    });
-
-    socket.on('connect', async () => {
-      try {
-        const greeting = await waitForResponse();
-        if (settled) {
-          return;
-        }
-
-        if (parseSmtpCode(greeting) !== 220) {
-          finish({
-            smtpCode: null,
-            smtpMessage: `SMTP greeting did not return 220: ${greeting.trim()}`,
-          });
-          return;
-        }
-
-        socket.write('EHLO verifier.local\r\n');
-        const ehloResponse = await waitForResponse();
-        if (settled) {
-          return;
-        }
-
-        const ehloCode = parseSmtpCode(ehloResponse);
-        if (ehloCode < 200 || ehloCode >= 400) {
-          finish({
-            smtpCode: null,
-            smtpMessage: `SMTP EHLO failed: ${ehloResponse.trim()}`,
-          });
-          return;
-        }
-
-        socket.write('MAIL FROM:<verify@verifier.local>\r\n');
-        const mailFromResponse = await waitForResponse();
-        if (settled) {
-          return;
-        }
-
-        const mailFromCode = parseSmtpCode(mailFromResponse);
-        if (mailFromCode < 200 || mailFromCode >= 400) {
-          finish({
-            smtpCode: null,
-            smtpMessage: `SMTP MAIL FROM failed: ${mailFromResponse.trim()}`,
-          });
-          return;
-        }
-
-        socket.write(`RCPT TO:<${email}>\r\n`);
-        const rcptResponse = await waitForResponse();
-        const rcptCode = parseSmtpCode(rcptResponse);
-
-        if (!settled) {
-          socket.write('QUIT\r\n', () => {
-            finish(
-              {
-                smtpCode: rcptCode,
-                smtpMessage: rcptResponse.trim(),
-              },
-              'end'
-            );
-          });
-        }
-      } catch (error) {
-        finish({
-          smtpCode: null,
-          smtpMessage: `SMTP probe failed: ${error.message}`,
-        });
-      }
-    });
-  });
+        smtpMessage: `Both providers failed: ${zbError.message}`,
+      };
+    }
+  }
 }
 
 async function verifyEmail(email) {
@@ -215,6 +128,7 @@ async function verifyEmail(email) {
       mxHost: null,
       smtpCode: null,
       smtpMessage: null,
+      provider: 'None',
     });
   }
 
@@ -230,6 +144,7 @@ async function verifyEmail(email) {
       mxHost: null,
       smtpCode: null,
       smtpMessage: `MX lookup failed: ${error.code || error.message}`,
+      provider: 'None',
     });
   }
 
@@ -240,6 +155,7 @@ async function verifyEmail(email) {
       mxHost: null,
       smtpCode: null,
       smtpMessage: 'No MX records found',
+      provider: 'None',
     });
   }
 
@@ -253,17 +169,19 @@ async function verifyEmail(email) {
       mxHost: null,
       smtpCode: null,
       smtpMessage: 'MX record did not include an exchange host',
+      provider: 'None',
     });
   }
 
-  const smtp = await smtpProbe(mxHost, email);
+  const smtp = await verifyMailbox(email);
 
-  return result(email, mapSmtpStatus(smtp.smtpCode), {
+  return result(email, smtp.status, {
     formatValid: true,
     mxFound: true,
     mxHost,
     smtpCode: smtp.smtpCode,
     smtpMessage: smtp.smtpMessage,
+    provider: smtp.provider,
   });
 }
 
@@ -289,6 +207,7 @@ app.post('/verify', async (req, res) => {
         mxHost: null,
         smtpCode: null,
         smtpMessage: `Unexpected verification error: ${error.message}`,
+        provider: 'None',
       })
     );
   }
@@ -309,6 +228,7 @@ app.use((error, _req, res, next) => {
       mxHost: null,
       smtpCode: null,
       smtpMessage: `Request parsing failed: ${error.message}`,
+      provider: 'None',
     })
   );
 });
@@ -323,6 +243,7 @@ app.use((_req, res) => {
       mxHost: null,
       smtpCode: null,
       smtpMessage: 'Route not found',
+      provider: 'None',
     })
   );
 });
