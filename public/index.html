@@ -453,7 +453,7 @@
     // Set USE_FALLBACK = true if Vercel blocks outbound port 25
     // Then deploy a Node.js Express server on Hetzner at port 3001 with the same verify logic
     const PRIMARY_API = '/api/verify';
-    const FALLBACK_API = 'http://65.21.7.133:3001/verify';
+    const FALLBACK_API = 'http://65.21.7.133:443/verify';
     const USE_FALLBACK = true;
 
     const SESSION_KEY = 'verifexAuthenticated';
