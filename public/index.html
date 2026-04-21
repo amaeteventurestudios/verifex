@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VERIFEX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --background: #000000;
+      --text-primary: #ffffff;
+      --text-secondary: #888888;
+      --accent: #2d9cdb;
+      --success: #00ff94;
+      --error: #ff3b5c;
+      --warning: #ffb800;
+      --border: #1a1a1a;
+      --card: #0a0a0a;
+      --input-border: #333333;
+      --code-bg: #050505;
+      --heading: "Space Grotesk", sans-serif;
+      --body: "Inter", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background: var(--background);
+      color: var(--text-primary);
+      font-family: var(--body);
+    }
+
+    body {
+      min-width: 320px;
+      overflow-x: hidden;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .login-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 24px;
+      background: var(--background);
+    }
+
+    .login-card {
+      width: min(100%, 440px);
+      padding: 48px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+    }
+
+    .brand {
+      margin: 0;
+      font-family: var(--heading);
+      font-size: 48px;
+      line-height: 1;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .tagline {
+      margin: 10px 0 44px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .field {
+      display: block;
+      width: 100%;
+      margin-bottom: 28px;
+    }
+
+    .input {
+      width: 100%;
+      height: 48px;
+      border: 0;
+      border-bottom: 1px solid var(--input-border);
+      border-radius: 4px 4px 0 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text-primary);
+      transition: border-color 180ms ease;
+    }
+
+    .input:focus {
+      border-bottom-color: var(--accent);
+    }
+
+    .input::placeholder {
+      color: #4d4d4d;
+    }
+
+    .login-card .input {
+      font-size: 15px;
+    }
+
+    .button {
+      width: 100%;
+      height: 48px;
+      border: 0;
+      border-radius: 0;
+      background: var(--accent);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-align: center;
+      text-transform: uppercase;
+      transition: filter 180ms ease, transform 180ms ease;
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      filter: brightness(1.08);
+    }
+
+    .button:active {
+      transform: translateY(1px);
+    }
+
+    .button:disabled {
+      cursor: wait;
+      filter: saturate(0.8);
+    }
+
+    .login-error {
+      min-height: 20px;
+      margin: 16px 0 0;
+      color: var(--error);
+      font-size: 13px;
+      line-height: 1.5;
+      opacity: 0;
+    }
+
+    .app {
+      display: none;
+      min-height: 100vh;
+      opacity: 0;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 28px 32px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .wordmark {
+      font-family: var(--heading);
+      font-size: 22px;
+      line-height: 1;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .logout {
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .logout:hover,
+    .logout:focus-visible,
+    .check-another:hover,
+    .check-another:focus-visible {
+      color: var(--text-primary);
+      outline: 0;
+    }
+
+    .main {
+      width: min(100% - 48px, 640px);
+      margin: 0 auto;
+      padding: 88px 0 80px;
+    }
+
+    .section-label {
+      margin: 0 0 24px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .verify-input {
+      height: 68px;
+      font-family: var(--heading);
+      font-size: 24px;
+      font-weight: 500;
+    }
+
+    .verify-form .button {
+      margin-top: 22px;
+    }
+
+    .dot-loader {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 100%;
+    }
+
+    .dot-loader span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      opacity: 0.4;
+    }
+
+    .result-area {
+      min-height: 0;
+    }
+
+    .result-card {
+      margin-top: 36px;
+      padding: 36px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+    }
+
+    .status-badge {
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 auto 16px;
+      border: 1px solid currentColor;
+      padding: 10px 14px;
+      color: var(--warning);
+      font-family: var(--heading);
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.15;
+      text-align: center;
+    }
+
+    .status-valid {
+      color: var(--success);
+    }
+
+    .status-error {
+      color: var(--error);
+    }
+
+    .status-warning {
+      color: var(--warning);
+    }
+
+    .checked-email {
+      margin: 0 0 28px;
+      color: var(--text-secondary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+
+    .check-list {
+      display: grid;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border-top: 1px solid var(--border);
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 52px;
+      gap: 18px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .check-result {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 9px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--warning);
+    }
+
+    .check-pass .dot {
+      background: var(--success);
+    }
+
+    .check-fail .dot {
+      background: var(--error);
+    }
+
+    .check-pending .dot {
+      background: var(--warning);
+    }
+
+    .check-pass .check-result {
+      color: var(--success);
+    }
+
+    .check-fail .check-result {
+      color: var(--error);
+    }
+
+    .check-pending .check-result {
+      color: var(--warning);
+    }
+
+    .smtp-block {
+      margin: 28px 0 0;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--code-bg);
+      color: var(--text-secondary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .check-another {
+      display: block;
+      width: fit-content;
+      margin: 22px auto 0;
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 600px) {
+      .login-screen {
+        padding: 18px;
+      }
+
+      .login-card {
+        padding: 32px 28px;
+      }
+
+      .brand {
+        font-size: 42px;
+      }
+
+      .topbar {
+        padding: 22px 20px;
+      }
+
+      .main {
+        width: min(100% - 32px, 640px);
+        padding: 64px 0 56px;
+      }
+
+      .verify-input {
+        font-size: 22px;
+      }
+
+      .result-card {
+        padding: 28px 22px;
+      }
+
+      .status-badge {
+        font-size: 19px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
+    <form class="login-card" id="loginForm" autocomplete="off">
+      <h1 class="brand" id="loginTitle">VERIFEX</h1>
+      <p class="tagline">Corporate email intelligence.</p>
+
+      <label class="field" aria-label="Username">
+        <input class="input" id="username" name="username" type="text" placeholder="Username" autocomplete="username" required>
+      </label>
+
+      <label class="field" aria-label="Password">
+        <input class="input" id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+      </label>
+
+      <button class="button" type="submit">ENTER</button>
+      <p class="login-error" id="loginError" role="alert">Invalid credentials.</p>
+    </form>
+  </section>
+
+  <div class="app" id="app" aria-live="polite">
+    <header class="topbar">
+      <div class="wordmark">VERIFEX</div>
+      <button class="logout" id="logoutButton" type="button">LOGOUT</button>
+    </header>
+
+    <main class="main">
+      <form class="verify-form" id="verifyForm" novalidate>
+        <p class="section-label">Verify a corporate email address</p>
+        <input class="input verify-input" id="emailInput" name="email" type="email" placeholder="name@company.com" autocomplete="email" required>
+        <button class="button" id="verifyButton" type="submit">VERIFY</button>
+      </form>
+
+      <div class="result-area" id="resultArea"></div>
+    </main>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" referrerpolicy="no-referrer"></script>
+  <script>
+    // Set USE_FALLBACK = true if Vercel blocks outbound port 25
+    // Then deploy a Node.js Express server on Hetzner at port 3001 with the same verify logic
+    const PRIMARY_API = '/api/verify';
+    const FALLBACK_API = 'http://65.21.7.133:3001/verify';
+    const USE_FALLBACK = false;
+
+    const SESSION_KEY = 'verifexAuthenticated';
+    const loginScreen = document.getElementById('loginScreen');
+    const loginForm = document.getElementById('loginForm');
+    const loginError = document.getElementById('loginError');
+    const app = document.getElementById('app');
+    const logoutButton = document.getElementById('logoutButton');
+    const verifyForm = document.getElementById('verifyForm');
+    const verifyButton = document.getElementById('verifyButton');
+    const emailInput = document.getElementById('emailInput');
+    const resultArea = document.getElementById('resultArea');
+    let loaderTween = null;
+
+    function revealApp(animated) {
+      app.style.display = 'block';
+
+      if (!animated) {
+        loginScreen.style.display = 'none';
+        app.style.opacity = '1';
+        return;
+      }
+
+      const timeline = gsap.timeline();
+      timeline
+        .to(loginForm, {
+          duration: 0.28,
+          scale: 0.94,
+          opacity: 0,
+          ease: 'power2.inOut'
+        })
+        .to(loginScreen, {
+          duration: 0.24,
+          opacity: 0,
+          ease: 'power2.out',
+          onComplete: () => {
+            loginScreen.style.display = 'none';
+          }
+        }, '-=0.08')
+        .fromTo(app, {
+          opacity: 0,
+          y: 14
+        }, {
+          duration: 0.36,
+          opacity: 1,
+          y: 0,
+          ease: 'power2.out'
+        }, '-=0.02');
+    }
+
+    function showLoginError() {
+      loginError.style.opacity = '1';
+      gsap.fromTo(loginForm, {
+        x: 0
+      }, {
+        duration: 0.46,
+        x: 0,
+        ease: 'power2.out',
+        keyframes: [
+          { x: -12, duration: 0.06 },
+          { x: 12, duration: 0.06 },
+          { x: -9, duration: 0.06 },
+          { x: 9, duration: 0.06 },
+          { x: -5, duration: 0.06 },
+          { x: 0, duration: 0.08 }
+        ]
+      });
+      gsap.fromTo(loginError, { y: -4 }, { duration: 0.24, y: 0, ease: 'power2.out' });
+    }
+
+    function setLoading(isLoading) {
+      verifyButton.disabled = isLoading;
+
+      if (loaderTween) {
+        loaderTween.kill();
+        loaderTween = null;
+      }
+
+      if (!isLoading) {
+        verifyButton.textContent = 'VERIFY';
+        return;
+      }
+
+      verifyButton.innerHTML = '<span class="dot-loader" aria-label="Verifying"><span></span><span></span><span></span></span>';
+      loaderTween = gsap.to('.dot-loader span', {
+        opacity: 1,
+        y: -3,
+        duration: 0.36,
+        repeat: -1,
+        yoyo: true,
+        stagger: 0.12,
+        ease: 'sine.inOut'
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function statusClass(status) {
+      if (status === 'Valid') {
+        return 'status-valid';
+      }
+
+      if (['Invalid Format', 'Invalid Domain', 'Invalid Mailbox'].includes(status)) {
+        return 'status-error';
+      }
+
+      return 'status-warning';
+    }
+
+    function checkState(label, state) {
+      const text = state === 'pass' ? 'Pass' : state === 'fail' ? 'Fail' : 'Pending';
+      return `
+        <li class="check-row check-${state}">
+          <span>${label}</span>
+          <span class="check-result"><span class="dot"></span>${text}</span>
+        </li>
+      `;
+    }
+
+    function smtpState(data) {
+      if (!data.details.formatValid || !data.details.mxFound) {
+        return 'pending';
+      }
+
+      if (data.status === 'Valid') {
+        return 'pass';
+      }
+
+      if (data.status === 'Invalid Mailbox') {
+        return 'fail';
+      }
+
+      return 'pending';
+    }
+
+    function renderResult(data) {
+      const details = data.details || {};
+      const resultData = {
+        email: data.email || emailInput.value.trim(),
+        status: data.status || 'Unable to Confirm',
+        details: {
+          formatValid: Boolean(details.formatValid),
+          mxFound: Boolean(details.mxFound),
+          mxHost: details.mxHost || null,
+          smtpCode: Number.isInteger(details.smtpCode) ? details.smtpCode : null,
+          smtpMessage: details.smtpMessage || null
+        }
+      };
+
+      const mxRowState = !resultData.details.formatValid ? 'pending' : resultData.details.mxFound ? 'pass' : 'fail';
+      const smtpMessage = resultData.details.smtpMessage || 'No SMTP response captured.';
+      const smtpCode = resultData.details.smtpCode ? `Code ${resultData.details.smtpCode}\n` : '';
+
+      resultArea.innerHTML = `
+        <article class="result-card">
+          <div class="status-badge ${statusClass(resultData.status)}">${escapeHtml(resultData.status)}</div>
+          <p class="checked-email">${escapeHtml(resultData.email)}</p>
+          <ul class="check-list">
+            ${checkState('Format Check', resultData.details.formatValid ? 'pass' : 'fail')}
+            ${checkState('MX Record', mxRowState)}
+            ${checkState('SMTP Probe', smtpState(resultData))}
+          </ul>
+          <pre class="smtp-block">${escapeHtml(smtpCode + smtpMessage)}</pre>
+        </article>
+        <button class="check-another" id="checkAnother" type="button">CHECK ANOTHER</button>
+      `;
+
+      gsap.fromTo('.result-card', {
+        opacity: 0,
+        y: 40
+      }, {
+        duration: 0.42,
+        opacity: 1,
+        y: 0,
+        ease: 'power3.out'
+      });
+
+      document.getElementById('checkAnother').addEventListener('click', () => {
+        resultArea.innerHTML = '';
+        emailInput.value = '';
+        emailInput.focus();
+      });
+    }
+
+    loginForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+
+      if (username === 'admin' && password === 'USG2026!') {
+        sessionStorage.setItem(SESSION_KEY, 'true');
+        revealApp(true);
+        return;
+      }
+
+      showLoginError();
+    });
+
+    logoutButton.addEventListener('click', () => {
+      sessionStorage.removeItem(SESSION_KEY);
+      window.location.reload();
+    });
+
+    verifyForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const email = emailInput.value.trim();
+      const endpoint = USE_FALLBACK ? FALLBACK_API : PRIMARY_API;
+
+      if (!email) {
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email })
+        });
+        const data = await response.json();
+        renderResult(data);
+      } catch (error) {
+        renderResult({
+          email,
+          status: 'Unable to Confirm',
+          details: {
+            formatValid: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
+            mxFound: false,
+            mxHost: null,
+            smtpCode: null,
+            smtpMessage: `Request failed: ${error.message}`
+          }
+        });
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    if (sessionStorage.getItem(SESSION_KEY) === 'true') {
+      revealApp(false);
+    }
+  </script>
+</body>
+</html>
