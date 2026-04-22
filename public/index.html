@@ -169,6 +169,58 @@
       border-bottom: 1px solid var(--border);
     }
 
+    .credits-bar {
+      width: 100%;
+      padding: 14px 20px;
+      background: var(--background);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .credits-grid {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: 12px;
+      width: min(100%, 640px);
+      margin: 0 auto;
+    }
+
+    .credit-pill {
+      min-width: 176px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 16px;
+      background: var(--card);
+      text-align: center;
+    }
+
+    .credit-provider,
+    .credit-label {
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      line-height: 1.3;
+      text-transform: uppercase;
+    }
+
+    .credit-count {
+      margin: 2px 0;
+      color: var(--text-primary);
+      font-family: var(--heading);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .credit-count.warning {
+      color: var(--warning);
+    }
+
+    .credit-count.urgent {
+      color: var(--error);
+    }
+
     .wordmark {
       font-family: var(--heading);
       font-size: 22px;
@@ -348,6 +400,10 @@
       background: var(--warning);
     }
 
+    .check-unable .dot {
+      background: var(--warning);
+    }
+
     .check-pass .check-result {
       color: var(--success);
     }
@@ -357,6 +413,10 @@
     }
 
     .check-pending .check-result {
+      color: var(--warning);
+    }
+
+    .check-unable .check-result {
       color: var(--warning);
     }
 
@@ -542,6 +602,16 @@
         padding: 22px 20px;
       }
 
+      .credits-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .credit-pill {
+        min-width: 0;
+        padding: 8px 10px;
+      }
+
       .main {
         width: min(100% - 32px, 640px);
         padding: 64px 0 56px;
@@ -600,6 +670,21 @@
       <button class="logout" id="logoutButton" type="button">LOGOUT</button>
     </header>
 
+    <section class="credits-bar" aria-label="Provider credits">
+      <div class="credits-grid">
+        <div class="credit-pill">
+          <div class="credit-provider">VERIFALIA</div>
+          <div class="credit-count" id="verifaliaCredits">...</div>
+          <div class="credit-label">credits remaining</div>
+        </div>
+        <div class="credit-pill">
+          <div class="credit-provider">ZEROBOUNCE</div>
+          <div class="credit-count" id="zeroBounceCredits">...</div>
+          <div class="credit-label">credits remaining</div>
+        </div>
+      </div>
+    </section>
+
     <main class="main">
       <form class="verify-form" id="verifyForm" novalidate>
         <p class="section-label">Verify a corporate email address</p>
@@ -626,6 +711,7 @@
     const PRIMARY_API = '/api/verify';
     const FALLBACK_API = 'https://social.amaete.com/verify';
     const USE_FALLBACK = true;
+    const CREDITS_API = 'https://social.amaete.com/credits';
 
     const SESSION_KEY = 'verifexAuthenticated';
     const HISTORY_KEY = 'verifex_history';
@@ -640,6 +726,8 @@
     const resultArea = document.getElementById('resultArea');
     const historyList = document.getElementById('historyList');
     const clearHistory = document.getElementById('clearHistory');
+    const verifaliaCredits = document.getElementById('verifaliaCredits');
+    const zeroBounceCredits = document.getElementById('zeroBounceCredits');
     let loaderTween = null;
 
     function revealApp(animated) {
@@ -742,6 +830,59 @@
       }
 
       return 'status-warning';
+    }
+
+    function creditClass(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return '';
+      }
+
+      if (number < 5) {
+        return 'urgent';
+      }
+
+      if (number <= 10) {
+        return 'warning';
+      }
+
+      return '';
+    }
+
+    function setCreditValue(element, value) {
+      element.classList.remove('warning', 'urgent');
+      element.textContent = value;
+
+      const className = creditClass(value);
+      if (className) {
+        element.classList.add(className);
+      }
+    }
+
+    async function fetchProviderCredits(provider) {
+      const response = await fetch(CREDITS_API);
+      if (!response.ok) {
+        throw new Error(`Credits request failed with HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return provider === 'verifalia' ? data.verifalia && data.verifalia.daily : data.zerobounce && data.zerobounce.monthly;
+    }
+
+    async function fetchCredits() {
+      setCreditValue(verifaliaCredits, '...');
+      setCreditValue(zeroBounceCredits, '...');
+
+      const [verifaliaResult, zeroBounceResult] = await Promise.allSettled([
+        fetchProviderCredits('verifalia'),
+        fetchProviderCredits('zerobounce')
+      ]);
+
+      const verifaliaValue = verifaliaResult.status === 'fulfilled' && verifaliaResult.value !== null && verifaliaResult.value !== undefined ? verifaliaResult.value : 'N/A';
+      const zeroBounceValue = zeroBounceResult.status === 'fulfilled' && zeroBounceResult.value !== null && zeroBounceResult.value !== undefined ? zeroBounceResult.value : 'N/A';
+
+      setCreditValue(verifaliaCredits, verifaliaValue);
+      setCreditValue(zeroBounceCredits, zeroBounceValue);
     }
 
     function normalizeResult(data) {
@@ -850,7 +991,7 @@
     }
 
     function checkState(label, state) {
-      const text = state === 'pass' ? 'Pass' : state === 'fail' ? 'Fail' : 'Pending';
+      const text = state === 'pass' ? 'Pass' : state === 'fail' ? 'Fail' : state === 'unable' ? 'Unable' : 'Pending';
       return `
         <li class="check-row check-${state}">
           <span>${label}</span>
@@ -860,16 +1001,16 @@
     }
 
     function smtpState(data) {
-      if (!data.details.formatValid || !data.details.mxFound) {
-        return 'pending';
-      }
-
       if (data.status === 'Valid') {
         return 'pass';
       }
 
       if (data.status === 'Invalid Mailbox') {
         return 'fail';
+      }
+
+      if (data.status && data.status.indexOf('Unable to Confirm') === 0) {
+        return 'unable';
       }
 
       return 'pending';
@@ -991,6 +1132,7 @@
         });
       } finally {
         setLoading(false);
+        fetchCredits();
       }
     });
 
@@ -999,6 +1141,7 @@
     }
 
     renderHistory();
+    fetchCredits();
   </script>
 </body>
 </html>

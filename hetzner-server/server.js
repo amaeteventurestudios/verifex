@@ -34,7 +34,7 @@ function result(email, status, details) {
 
 function corsHeaders(_req, res, next) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   next();
 }
@@ -120,6 +120,89 @@ async function verifyMailbox(email) {
   }
 }
 
+function nullableNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function findRemainingCreditNumber(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    const lowerKey = key.toLowerCase();
+    const looksLikeCredits = lowerKey.includes('credit') || lowerKey.includes('daily') || lowerKey.includes('free');
+    const looksLikeRemaining = lowerKey.includes('remaining') || lowerKey.includes('available') || lowerKey.includes('balance');
+
+    if (looksLikeCredits && looksLikeRemaining) {
+      const number = nullableNumber(nestedValue);
+      if (number !== null) {
+        return number;
+      }
+    }
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    const number = findRemainingCreditNumber(nestedValue);
+    if (number !== null) {
+      return number;
+    }
+  }
+
+  return null;
+}
+
+function extractVerifaliaDailyCredits(data) {
+  const directCandidates = [
+    data && data.daily,
+    data && data.dailyCredits,
+    data && data.dailyCreditsRemaining,
+    data && data.freeDailyCredits,
+    data && data.freeDailyCreditsRemaining,
+    data && data.freeCreditsRemaining,
+    data && data.remainingCredits,
+    data && data.remaining,
+  ];
+
+  for (const candidate of directCandidates) {
+    const number = nullableNumber(candidate);
+    if (number !== null) {
+      return number;
+    }
+  }
+
+  return findRemainingCreditNumber(data);
+}
+
+async function fetchVerifaliaCredits() {
+  const auth = Buffer.from(`amaete@amaete.com:${VERIFALIA_PASSWORD}`).toString('base64');
+  const response = await fetch('https://api.verifalia.com/v2.7/accounts/me/daily-usage', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Verifalia credits request failed with HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  return extractVerifaliaDailyCredits(data);
+}
+
+async function fetchZeroBounceCredits() {
+  const response = await fetch(`https://api.zerobounce.net/v2/getcredits?api_key=${ZEROBOUNCE_API_KEY}`);
+
+  if (!response.ok) {
+    throw new Error(`ZeroBounce credits request failed with HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  return nullableNumber(data && data.Credits);
+}
+
 async function verifyEmail(email) {
   if (!FORMAT_REGEX.test(email)) {
     return result(email, 'Invalid Format', {
@@ -190,6 +273,18 @@ app.use(express.json({ limit: '1mb' }));
 
 app.options('*', (_req, res) => {
   res.status(204).end();
+});
+
+app.get('/credits', async (_req, res) => {
+  const [verifalia, zerobounce] = await Promise.all([
+    fetchVerifaliaCredits().catch(() => null),
+    fetchZeroBounceCredits().catch(() => null),
+  ]);
+
+  sendJson(res, 200, {
+    verifalia: { daily: verifalia },
+    zerobounce: { monthly: zerobounce },
+  });
 });
 
 app.post('/verify', async (req, res) => {
